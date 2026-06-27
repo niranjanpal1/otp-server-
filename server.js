@@ -6,6 +6,8 @@ const nodemailer = require("nodemailer");
 const app = express();
 app.use(express.json());
 
+const PORT = process.env.PORT || 3000;
+
 const otpStore = {};
 
 const transporter = nodemailer.createTransport({
@@ -16,11 +18,21 @@ const transporter = nodemailer.createTransport({
   },
 });
 
+app.get("/", (req, res) => {
+  res.json({
+    success: true,
+    message: "OTP Server is running"
+  });
+});
+
 app.post("/send-otp", async (req, res) => {
   const { email } = req.body;
 
   if (!email) {
-    return res.status(400).json({ error: "Email required" });
+    return res.status(400).json({
+      success: false,
+      message: "Email required"
+    });
   }
 
   const otp = Math.floor(100000 + Math.random() * 900000).toString();
@@ -34,9 +46,18 @@ app.post("/send-otp", async (req, res) => {
       text: `Your OTP is: ${otp}`,
     });
 
-    res.json({ success: true, message: "OTP sent" });
+    res.json({
+      success: true,
+      message: "OTP sent"
+    });
+
   } catch (err) {
-    res.status(500).json({ success: false, error: err.message });
+    console.error("Mail Error:", err);
+
+    res.status(500).json({
+      success: false,
+      error: err.message
+    });
   }
 });
 
@@ -45,12 +66,21 @@ app.post("/verify-otp", (req, res) => {
 
   if (otpStore[email] === otp) {
     delete otpStore[email];
-    return res.json({ success: true, message: "OTP verified" });
+
+    return res.json({
+      success: true,
+      message: "OTP verified"
+    });
   }
 
-  res.status(400).json({ success: false, message: "Invalid OTP" });
+  res.status(400).json({
+    success: false,
+    message: "Invalid OTP"
+  });
 });
 
-app.listen(process.env.PORT, () => {
-  console.log(`Server running on port ${process.env.PORT}`);
+app.listen(PORT, () => {
+  console.log(`Server running on port ${PORT}`);
+  console.log("EMAIL:", process.env.EMAIL);
+  console.log("APP_PASSWORD:", process.env.APP_PASSWORD ? "Loaded" : "Missing");
 });
