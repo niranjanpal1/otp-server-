@@ -1,86 +1,81 @@
-require("dotenv").config();
-
-const express = require("express");
-const nodemailer = require("nodemailer");
+const express = require('express');
+const multer = require('multer');
+const path = require('path');
+const cors = require('cors');
+const fs = require('fs');
 
 const app = express();
+app.use(cors());
 app.use(express.json());
+app.use(express.static('public'));
 
-const PORT = process.env.PORT || 3000;
+// Video/audio er jonno proper MIME type set korchi
+app.use('/uploads', express.static('uploads', {
+  setHeaders: (res, filePath) => {
+    if (filePath.endsWith('.webm')) res.set('Content-Type', 'video/webm');
+    if (filePath.endsWith('.mp4')) res.set('Content-Type', 'video/mp4');
+    if (filePath.endsWith('.mkv')) res.set('Content-Type', 'video/x-matroska');
+    if (filePath.endsWith('.mp3')) res.set('Content-Type', 'audio/mpeg');
+    if (filePath.endsWith('.wav')) res.set('Content-Type', 'audio/wav');
+  }
+}));
 
-const otpStore = {};
+const DB_FILE = 'data.json';
+const UPLOAD_VIDEO = 'uploads/videos';
+const UPLOAD_AUDIO = 'uploads/audio';
 
-const transporter = nodemailer.createTransport({
-  service: "gmail",
-  auth: {
-    user: process.env.EMAIL,
-    pass: process.env.APP_PASSWORD,
+fs.mkdirSync(UPLOAD_VIDEO, { recursive: true });
+fs.mkdirSync(UPLOAD_AUDIO, { recursive: true });
+if (!fs.existsSync(DB_FILE)) fs.writeFileSync(DB_FILE, '[]');
+
+const readDB = () => JSON.parse(fs.readFileSync(DB_FILE));
+const writeDB = (data) => fs.writeFileSync(DB_FILE, JSON.stringify(data, null, 2));
+
+const storage = multer.diskStorage({
+  destination: (req, file, cb) => {
+    const dir = file.mimetype.startsWith('video')? UPLOAD_VIDEO : UPLOAD_AUDIO;
+    cb(null, dir);
   },
-});
-
-app.get("/", (req, res) => {
-  res.json({
-    success: true,
-    message: "OTP Server is running"
-  });
-});
-
-app.post("/send-otp", async (req, res) => {
-  const { email } = req.body;
-
-  if (!email) {
-    return res.status(400).json({
-      success: false,
-      message: "Email required"
-    });
-  }
-
-  const otp = Math.floor(100000 + Math.random() * 900000).toString();
-  otpStore[email] = otp;
-
-  try {
-    await transporter.sendMail({
-      from: process.env.EMAIL,
-      to: email,
-      subject: "Your OTP Code",
-      text: `Your OTP is: ${otp}`,
-    });
-
-    res.json({
-      success: true,
-      message: "OTP sent"
-    });
-
-  } catch (err) {
-    console.error("Mail Error:", err);
-
-    res.status(500).json({
-      success: false,
-      error: err.message
-    });
+  filename: (req, file, cb) => {
+    // Special character remove kore clean filename banachhi
+    const cleanName = file.originalname.replace(/[^a-zA-Z0-9.-]/g, '_');
+    cb(null, Date.now() + '_' + cleanName);
   }
 });
+const upload = multer({ storage });
 
-app.post("/verify-otp", (req, res) => {
-  const { email, otp } = req.body;
+app.post('/upload', upload.single('file'), (req, res) => {
+  const db = readDB();
+  const { filename, originalname, mimetype, size } = req.file;
+  const type = mimetype.startsWith('video')? 'video' : 'audio';
+  const newItem = {
+    id: Date.now(),
+    filename,
+    originalname,
+    type,
+    size,
+    upload_date: new Date().toISOString()
+  };
+  db.unshift(newItem);
+  writeDB(db);
+  res.json({ message: 'Uploaded!', id: newItem.id });
+});
 
-  if (otpStore[email] === otp) {
-    delete otpStore[email];
+app.get('/files', (req, res) => {
+  res.json(readDB());
+});
 
-    return res.json({
-      success: true,
-      message: "OTP verified"
-    });
+app.delete('/delete/:id', (req, res) => {
+  let db = readDB();
+  const id = parseInt(req.params.id);
+  const item = db.find(i => i.id === id);
+  if (item) {
+    const filepath = `uploads/${item.type}s/${item.filename}`;
+    if (fs.existsSync(filepath)) fs.unlinkSync(filepath);
+    db = db.filter(i => i.id!== id);
+    writeDB(db);
   }
-
-  res.status(400).json({
-    success: false,
-    message: "Invalid OTP"
-  });
+  res.json({ message: 'Deleted' });
 });
 
-app.listen(PORT, () => {
-  console.log(`Server running on port ${PORT}`);
-  console.log("EMAIL:", process.env.EMAIL);
-  console.log("APP_PASSWORD:", process.env.APP_PASSWORD ? "Loaded" : "Missing");
-});
+app.listen(3000, () => console.log('Server running: http://localhost:3000'));

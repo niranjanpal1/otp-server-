@@ -1,0 +1,98 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Media Vault</title>
+  <style>
+    body { font-family: Arial; background: #111; color: #eee; margin: 0; padding: 20px; }
+.container { max-width: 600px; margin: auto; }
+.card { background: #222; padding: 15px; margin: 10px 0; border-radius: 8px; }
+    input, button { padding: 10px; margin: 5px 0; width: 100%; box-sizing: border-box; }
+    button { background: #0af; color: #fff; border: none; border-radius: 5px; cursor: pointer; }
+    video, audio { width: 100%; margin-top: 10px; border-radius: 5px; background: #000; }
+.delete { background: #f44; width: auto; padding: 5px 10px; margin-top: 10px; }
+.tabs { display: flex; gap: 10px; margin-bottom: 20px; }
+.tab { flex: 1; padding: 10px; background: #333; text-align: center; cursor: pointer; border-radius: 5px; }
+.tab.active { background: #0af; }
+    small { color: #888; }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <h1>📱 Media Vault</h1>
+    <div class="card">
+      <input type="file" id="fileInput" accept="video/*,audio/*">
+      <button onclick="uploadFile()">Upload</button>
+      <div id="progress"></div>
+    </div>
+    <div class="tabs">
+      <div class="tab active" onclick="loadFiles('all', event)">All</div>
+      <div class="tab" onclick="loadFiles('video', event)">Videos</div>
+      <div class="tab" onclick="loadFiles('audio', event)">Audio</div>
+    </div>
+    <div id="fileList"></div>
+  </div>
+<script>
+let currentFilter = 'all';
+
+async function uploadFile() {
+  const file = document.getElementById('fileInput').files[0];
+  if (!file) return alert('File select kor');
+  const formData = new FormData();
+  formData.append('file', file);
+  document.getElementById('progress').innerText = 'Uploading...';
+  await fetch('/upload', { method: 'POST', body: formData });
+  document.getElementById('progress').innerText = 'Done!';
+  document.getElementById('fileInput').value = '';
+  setTimeout(() => document.getElementById('progress').innerText = '', 2000);
+  loadFiles(currentFilter, null);
+}
+
+async function loadFiles(filter, e) {
+  currentFilter = filter;
+  document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
+  if (e) e.target.classList.add('active');
+  else document.querySelector('.tab').classList.add('active');
+
+  const res = await fetch('/files');
+  let files = await res.json();
+  if (filter!== 'all') files = files.filter(f => f.type === filter);
+
+  const list = document.getElementById('fileList');
+  list.innerHTML = files.length? '' : '<p class="card">Kon file nei</p>';
+
+  files.forEach(f => {
+    const url = `/uploads/${f.type}s/${f.filename}`;
+    const size = (f.size / 1024 / 1024).toFixed(2);
+    list.innerHTML += `
+      <div class="card">
+        <b>${f.originalname}</b> <small>${size}MB</small>
+        ${f.type === 'video'
+     ? `<video src="${url}" controls preload="metadata" playsinline></video>`
+          : `<audio src="${url}" controls></audio>`
+        }
+        <button class="delete" onclick="deleteFile(${f.id})">Delete</button>
+      </div>
+    `;
+  });
+}
+
+async function deleteFile(id) {
+  if (!confirm('Delete korbi?')) return;
+  await fetch(`/delete/${id}`, { method: 'DELETE' });
+  loadFiles(currentFilter, null);
+}
+
+// Eita new - ekta play hole baki sob auto pause hobe
+document.addEventListener('play', function(e) {
+  if(e.target.tagName === 'VIDEO' || e.target.tagName === 'AUDIO') {
+    document.querySelectorAll('video, audio').forEach(el => {
+      if(el!== e.target) el.pause();
+    });
+  }
+}, true);
+
+loadFiles('all', null);
+</script>
+</body>
+</html>
