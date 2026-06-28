@@ -1,2 +1,11 @@
-node_modules
+node_modules/
 .env
+npm-debug.log
+yarn-error.log
+
+# uploads / runtime files (optional but recommended)
+uploads/
+
+# OS files
+.DS_Store
+Thumbs.db
