@@ -78,4 +78,6 @@ app.delete('/delete/:id', (req, res) => {
   res.json({ message: 'Deleted' });
 });
 
-app.listen(3000, () => console.log('Server running: http://localhost:3000'));
+// Render er jonno PORT fix
+const PORT = process.env.PORT || 3000;
+app.listen(PORT, () => console.log(`Server running on ${PORT}`));
