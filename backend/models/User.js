@@ -1,19 +1,9 @@
-const firebase = require('firebase/app');
-require('firebase/database');
-require('firebase/auth');
+const admin = require('firebase-admin');
 const bcrypt = require('bcryptjs');
 
-// Get Firebase database reference
-const getDatabase = () => {
-  try {
-    return firebase.database();
-  } catch (error) {
-    console.error('Error getting database:', error);
-    return null;
-  }
-};
+const db = admin.firestore();
 
-// User model for Firebase
+// User model for Firebase Firestore
 class User {
   constructor(data) {
     this.id = data.id || null;
@@ -25,9 +15,6 @@ class User {
 
   static async create(userData) {
     try {
-      const db = getDatabase();
-      if (!db) throw new Error('Database not initialized');
-
       // Hash password
       const salt = await bcrypt.genSalt(10);
       const hashedPassword = await bcrypt.hash(userData.password, salt);
@@ -41,8 +28,8 @@ class User {
         createdAt: new Date().toISOString(),
       };
 
-      // Save to Firebase
-      await db.ref(`users/${userId}`).set(newUser);
+      // Save to Firestore
+      await db.collection('users').doc(userId).set(newUser);
 
       return {
         id: userId,
@@ -57,15 +44,14 @@ class User {
 
   static async findByEmail(email) {
     try {
-      const db = getDatabase();
-      if (!db) throw new Error('Database not initialized');
+      const snapshot = await db.collection('users')
+        .where('email', '==', email.toLowerCase())
+        .limit(1)
+        .get();
 
-      const snapshot = await db.ref('users').orderByChild('email').equalTo(email.toLowerCase()).once('value');
-      
-      if (snapshot.exists()) {
-        const users = snapshot.val();
-        const userId = Object.keys(users)[0];
-        return { ...users[userId], id: userId };
+      if (!snapshot.empty) {
+        const doc = snapshot.docs[0];
+        return { ...doc.data(), id: doc.id };
       }
       return null;
     } catch (error) {
@@ -75,15 +61,14 @@ class User {
 
   static async findByUsername(username) {
     try {
-      const db = getDatabase();
-      if (!db) throw new Error('Database not initialized');
+      const snapshot = await db.collection('users')
+        .where('username', '==', username.toLowerCase())
+        .limit(1)
+        .get();
 
-      const snapshot = await db.ref('users').orderByChild('username').equalTo(username.toLowerCase()).once('value');
-      
-      if (snapshot.exists()) {
-        const users = snapshot.val();
-        const userId = Object.keys(users)[0];
-        return { ...users[userId], id: userId };
+      if (!snapshot.empty) {
+        const doc = snapshot.docs[0];
+        return { ...doc.data(), id: doc.id };
       }
       return null;
     } catch (error) {
@@ -93,13 +78,10 @@ class User {
 
   static async findById(userId) {
     try {
-      const db = getDatabase();
-      if (!db) throw new Error('Database not initialized');
+      const doc = await db.collection('users').doc(userId).get();
 
-      const snapshot = await db.ref(`users/${userId}`).once('value');
-      
-      if (snapshot.exists()) {
-        return { ...snapshot.val(), id: userId };
+      if (doc.exists) {
+        return { ...doc.data(), id: doc.id };
       }
       return null;
     } catch (error) {
