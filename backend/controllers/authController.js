@@ -28,15 +28,28 @@ exports.register = async (req, res) => {
       });
     }
 
-    // Check if user already exists
-    const userExists = await User.findOne({
-      $or: [{ email }, { username }],
-    });
+    if (password.length < 6) {
+      return res.status(400).json({
+        success: false,
+        message: 'Password must be at least 6 characters long',
+      });
+    }
 
-    if (userExists) {
+    // Check if email already exists
+    const emailExists = await User.findByEmail(email);
+    if (emailExists) {
       return res.status(409).json({
         success: false,
-        message: 'Email or username already in use',
+        message: 'Email already in use',
+      });
+    }
+
+    // Check if username already exists
+    const usernameExists = await User.findByUsername(username);
+    if (usernameExists) {
+      return res.status(409).json({
+        success: false,
+        message: 'Username already in use',
       });
     }
 
@@ -48,17 +61,13 @@ exports.register = async (req, res) => {
     });
 
     // Generate token
-    const token = generateToken(user._id);
-
-    // Remove password from response
-    const userResponse = user.toObject();
-    delete userResponse.password;
+    const token = generateToken(user.id);
 
     return res.status(201).json({
       success: true,
       message: 'User registered successfully',
       token,
-      user: userResponse,
+      user,
     });
   } catch (error) {
     console.error('Register error:', error);
@@ -83,8 +92,8 @@ exports.login = async (req, res) => {
       });
     }
 
-    // Find user and include password field
-    const user = await User.findOne({ email }).select('+password');
+    // Find user by email
+    const user = await User.findByEmail(email);
 
     if (!user) {
       return res.status(401).json({
@@ -94,7 +103,7 @@ exports.login = async (req, res) => {
     }
 
     // Check if password matches
-    const isPasswordValid = await user.matchPassword(password);
+    const isPasswordValid = await User.matchPassword(password, user.password);
 
     if (!isPasswordValid) {
       return res.status(401).json({
@@ -104,10 +113,10 @@ exports.login = async (req, res) => {
     }
 
     // Generate token
-    const token = generateToken(user._id);
+    const token = generateToken(user.id);
 
     // Remove password from response
-    const userResponse = user.toObject();
+    const userResponse = { ...user };
     delete userResponse.password;
 
     return res.status(200).json({
@@ -138,9 +147,13 @@ exports.getCurrentUser = async (req, res) => {
       });
     }
 
+    // Remove password from response
+    const userResponse = { ...user };
+    delete userResponse.password;
+
     return res.status(200).json({
       success: true,
-      user,
+      user: userResponse,
     });
   } catch (error) {
     console.error('Get user error:', error);
